@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
-#include"tables.h"
+#include "tables.h"
 
 #define loopSize 100   // Define how many finite steps are available for one ECU loop
 
@@ -23,9 +23,9 @@ word16 KtoFConversion(int F){           // This is used to convert F for the use
     return ((F-32) * 5 / 9) + 273.15;
 }
 
-struct Engine* get_engine_state() {     // To allow python to get the engine state
-    return &engineInstance;
-}
+// struct Engine* get_engine_state() {     // To allow python to get the engine state
+//     return &engineInstance;
+// }
 
 void calculateToeEnrichment(struct Engine *eng){
     int16_t deltaTPS = eng->TPS - eng->lastTPSValue;
@@ -49,102 +49,18 @@ void calculateAFR(struct Engine *eng){      // Fetches current AFR with lookup t
     int MAPBin = MAP_BINS - 1;
     int RPMBin = RPM_BINS - 1;
 
-    word16 MAPKPA = eng->MAP / 100;#include <sys/types.h>
-#include <stdint.h>
+    word16 MAPKPA = eng->MAP / 100;
 
-typedef uint16_t word16;
-typedef uint32_t word32;
-
-#define MAP_BINS 10
-#define RPM_BINS 10
-
-struct Engine {
-    // Static engine variables
-    int displacementPerRev; // Define the engine displacement in L
-    int coldCoolant;        // Threshold under which coolant is considered cold
-
-    // Dynamic engine variables
-    // Sensors
-    word16 TPS;     // Throttle position sensor
-    word16 RPM;     // Engine speed in RPM
-    word16 MAP;     // Manifold air pressure represented as Pa /10
-    word16 AAP;     // Ambient pressure represented as ambient Pa /10
-    word16 IAT;     // Intake air temperature measured in K
-    word16 OX;      // Oxygen sensor voltage represented at V * 100
-    word16 COOLANT; // Coolant tempurature in F
-    word16 fuelTrim;// Manual fuel trim
-
-    // Calculated values
-    word16 fuelLoad;
-    word16 VE;
-    float AFR_TARGET;
-    float fuelLoadCorrected;
-    float toeEnrichmentMultiplier;
-
-    // Engine Flags
-    bool EngineCranking;    // Cranking state of engine
-    bool Coldstart;         // Is the ECU Booting into a cold start condition
-
-    // Utility variables
-    word16 lastTPSValue;    // TPS Value on the last loop
-    word16 TIFE;            // toe-in fuel enrichment
-
-};
-
-struct ECUSchedule {        // Schedule certian unimportant heavy tasks to leave headroom for primary calculations
-    int ECULoopSize;        // Size of steps per loop of the scheduler
-    int ECUStep;            // Current step of the loop the ECU is on
-    
-    int crankCheckInterval; // How often we check for a cranking condition
-    int TPSCheckInterval;   // How often we check the throttle position sensor
-};
-
-// Y axis
-const uint16_t mapAxis[MAP_BINS] = {15, 20, 30, 40, 50, 60, 70, 80, 90, 100};
-
-// X axis
-const uint16_t rpmAxis[RPM_BINS] = {600, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000};
-
-// VE Table
-const uint8_t VETable[MAP_BINS * RPM_BINS] = {
-    // 600, 1k, 1.5k, 2k, 2.5k, 3k, 3.5k, 4k, 5k, 6k
-    30, 33, 37, 40, 43, 45, 47, 45, 42, 40,  // 15 kPa
-    33, 36, 40, 44, 47, 50, 52, 50, 47, 45,  // 20 kPa
-    38, 42, 47, 52, 55, 58, 60, 58, 54, 51,  // 30 kPa
-    43, 47, 53, 58, 62, 65, 67, 65, 60, 56,  // 40 kPa
-    48, 52, 58, 64, 68, 71, 73, 71, 65, 61,  // 50 kPa
-    51, 56, 63, 68, 74, 77, 79, 77, 70, 65,  // 60 kPa
-    55, 60, 67, 73, 78, 82, 84, 82, 74, 68,  // 70 kPa
-    58, 63, 71, 77, 81, 85, 87, 85, 77, 70,  // 80 kPa
-    62, 67, 75, 80, 85, 88, 90, 88, 80, 73,  // 90 kPa
-    65, 70, 78, 83, 87, 91, 93, 90, 82, 75   // 100 kPa 
-    };
-
-// AFR table
-const float afrTable[MAP_BINS * RPM_BINS] = {
-    // 600,  1k,   1.5k, 2k,   2.5k, 3k,   3.5k, 4k,   5k,   6k
-    14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, // 15 kPa
-    14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, // 20 kPa
-    14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, // 30 kPa
-    14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.7, 14.5, 14.5, // 40 kPa
-    14.7, 14.7, 14.7, 14.7, 14.5, 14.5, 14.5, 14.2, 14.0, 14.0, // 50 kPa
-    14.5, 14.5, 14.5, 14.5, 14.2, 14.0, 14.0, 13.8, 13.5, 13.5, // 60 kPa
-    14.0, 14.0, 14.0, 13.8, 13.5, 13.5, 13.2, 13.0, 13.0, 12.8, // 70 kPa
-    13.5, 13.5, 13.5, 13.2, 13.0, 13.0, 12.8, 12.8, 12.5, 12.5, // 80 kPa
-    13.0, 13.0, 13.0, 12.8, 12.5, 12.5, 12.5, 12.5, 12.2, 12.2, // 90 kPa
-    12.5, 12.5, 12.5, 12.5, 12.5, 12.5, 12.2, 12.2, 12.0, 12.0  // 100 kPa
-};
-
-// TODO: Impliment AFR Table
-        if(MAPKPA  >= mapAxis[i] ){         // Check if we are in the correct bin
-            MAPBin = (i == 0) ? 0 : i - 1;  // Make sure the bin isnt negative
+    for(int i = 0; i < MAP_BINS; i++){
+        if(MAPKPA >= mapAxis[i]){
+            MAPBin = (i == 0) ? 0 : i - 1;
             break;
         }
     }
 
-    for(int i = 0; i <= RPM_BINS; i++){     // Calculate bin of RPM
-        if(eng->RPM >= rpmAxis[i] ){        // Check if we are in the correct bin
-            RPMBin = (i == 0) ? 0 : i - 1;  // Make sure the bin isnt nagative
+    for(int i = 0; i < RPM_BINS; i++){
+        if(eng->RPM >= rpmAxis[i]){
+            RPMBin = (i == 0) ? 0 : i - 1;
             break;
         }
     }
