@@ -23,10 +23,6 @@ word16 KtoFConversion(int F){           // This is used to convert F for the use
     return ((F-32) * 5 / 9) + 273.15;
 }
 
-// struct Engine* get_engine_state() {     // To allow python to get the engine state
-//     return &engineInstance;
-// }
-
 void calculateToeEnrichment(struct Engine *eng){
     int16_t deltaTPS = eng->TPS - eng->lastTPSValue;
 
@@ -133,6 +129,7 @@ void initValues(struct Engine *eng, struct ECUSchedule *sched){
     eng->coldCoolant = 100;                             // Tempurature where under is considered cold starting
     eng->displacementPerRev = DISPLACEMENT_PER_REV;     // Set engine displacement
     eng->fuelTrim = initFuelTrim;
+    eng->IAT = KtoFConversion(70);                             // Set intake air tempurature to 70F on boot
 
     sched->ECULoopSize = loopSize;                      // Set the total loop size before the logic repeats
     sched->ECUStep = 0;
@@ -167,6 +164,10 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
 
 struct Engine engineInstance = {0};         // Instantiate instance of engine values
 struct ECUSchedule schedule;                // Instantiate the ECU Schedule
+
+struct Engine* get_engine_state() {     // To allow python to get the engine state
+    return &engineInstance;
+}
 
 int main(){
 
