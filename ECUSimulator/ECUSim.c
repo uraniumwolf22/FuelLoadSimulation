@@ -15,6 +15,9 @@
 #define crankingEnrichment 1.2      // Engine cranking enrichment
 #define initFuelTrim 1.0            // Manual fuel trim multiplier
 
+#define MAXSTFT 2000    // Maximum STFT correction
+#define MINSTFT -2000   // Minimum STFT correction
+
 const word16 DISPLACEMENT = 4;                            // Engine displacement in L
 const word16 DISPLACEMENT_PER_REV = DISPLACEMENT / 2;     // This will be pre-calculated and stored in ROM
 
@@ -105,11 +108,11 @@ void calculateFuelLoad(struct Engine *eng){         // Calculate engine theoreti
 
 word16 correctFuelLoad(struct Engine *eng){
     if(eng->Coldstart == true && eng->COOLANT <= eng->coldCoolant){
-        eng->fuelLoad = eng->fuelLoad * coldStartEnrichment;
+        eng->fuelLoad = eng->fuelLoad * coldStartEnrichment;    //TODO: Convert this to adjusting Target AFR not actual fuel load
     } else {
         eng->Coldstart = false;
     }
-    if (eng->EngineCranking == true){
+    if (eng->EngineCranking == true){                           //TODO: Convert this to adjusting Target AFR not actual fuel load
         eng->fuelLoad = eng->fuelLoad * crankingEnrichment;
     }
     if (eng->fuelTrim != 1){
@@ -119,9 +122,28 @@ word16 correctFuelLoad(struct Engine *eng){
     //TODO: You will need to condition the function to take the multiplier and convert it into actually how much the fuel load should change
     eng->fuelLoad = eng->fuelLoad * eng->toeEnrichmentMultiplier;
 
-    //TODO: add O2 correction
+    //TODO:  This should also be probably disabled under conditions like cold start and cranking
+    eng->fuelLoad = eng->fuelLoad * eng->OXCorrection;
 
 }
+
+void calculateSTFT(struct Engine *eng){
+    int AFRDELTA = (int)(eng->REALAFR * 10) - (int)(eng->AFR_TARGET * 10) * 10;  // Calculate AFR delta and convert to intager eg 14.7 = 147
+
+    int P = AFRDELTA >> 1;      // Calculate porportional,  by dividing the delta by 2
+
+    int IntigralStep = AFRDELTA >> 3;   // Calculate the intigral for the current step
+
+    eng->AFRIntigralAccumulator += IntigralStep;    // Apply intigral to the accumulator
+
+    if (eng->AFRIntigralAccumulator > MAXSTFT){     // Check if MAXSTFT is hit
+        eng->AFRIntigralAccumulator = MAXSTFT;      
+    } else if (eng->AFRIntigralAccumulator < MINSTFT){  // Check in MINSTFT is hit
+        eng->AFRIntigralAccumulator = MINSTFT;
+    }
+
+    eng->OXCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction
+} 
 
 void initValues(struct Engine *eng, struct ECUSchedule *sched){
 

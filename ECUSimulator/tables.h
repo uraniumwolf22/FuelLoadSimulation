@@ -14,21 +14,22 @@ struct Engine {
 
     // Dynamic engine variables
     // Sensors
-    word16 TPS;     // Throttle position sensor
-    word16 RPM;     // Engine speed in RPM
-    word16 MAP;     // Manifold air pressure represented as Pa /10
-    word16 AAP;     // Ambient pressure represented as ambient Pa /10
-    word16 IAT;     // Intake air temperature measured in K
-    word16 OX;      // Oxygen sensor voltage represented at V * 100
-    word16 COOLANT; // Coolant tempurature in F
-    word16 fuelTrim;// Manual fuel trim
+    word16 TPS;             // Throttle position sensor
+    word16 RPM;             // Engine speed in RPM
+    word16 MAP;             // Manifold air pressure represented as Pa /10
+    word16 AAP;             // Ambient pressure represented as ambient Pa /10
+    word16 IAT;             // Intake air temperature measured in K
+    word16 OXVoltage;       // Oxygen sensor voltage
+    word16 COOLANT;         // Coolant tempurature in F
+    word16 fuelTrim;        // Manual fuel trim
 
     // Calculated values
-    word16 fuelLoad;
-    word16 VE;
-    float AFR_TARGET;
-    float fuelLoadCorrected;
-    float toeEnrichmentMultiplier;
+    word16 fuelLoad;                // Current fuel load
+    word16 VE;                      // Current volumetric efficiency
+    word16 OXCorrection;            // Fuel correction value based on POSTAFR and AFR delta
+    word16 REALAFR;                 // AFR detected by the oxygen sensor
+    float AFR_TARGET;               // Current target AFR
+    float toeEnrichmentMultiplier;  // Enrichment based off the rate of change of the TPS sensor
 
     // Engine Flags
     bool EngineCranking;    // Cranking state of engine
@@ -37,6 +38,7 @@ struct Engine {
     // Utility variables
     word16 lastTPSValue;    // TPS Value on the last loop
     word16 TIFE;            // toe-in fuel enrichment
+    int AFRIntigralAccumulator; // accumulator for the STFT intigral
 
 };
 
