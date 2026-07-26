@@ -7,6 +7,9 @@ typedef uint32_t word32;
 #define MAP_BINS 10
 #define RPM_BINS 10
 
+#define LTFTRPM_BINS 16
+#define LTFTMAP_BINS 16
+
 struct Engine {
     // Static engine variables
     int displacementPerRev; // Define the engine displacement in L
@@ -27,6 +30,7 @@ struct Engine {
     word16 fuelLoad;                // Current fuel load
     word16 VE;                      // Current volumetric efficiency
     word16 OXCorrection;            // Fuel correction value based on POSTAFR and AFR delta
+    word16 LTFTCorrection;
     word16 REALAFR;                 // AFR detected by the oxygen sensor
     float AFR_TARGET;               // Current target AFR
     float toeEnrichmentMultiplier;  // Enrichment based off the rate of change of the TPS sensor
@@ -86,4 +90,11 @@ const float afrTable[MAP_BINS * RPM_BINS] = {
     12.5, 12.5, 12.5, 12.5, 12.5, 12.5, 12.2, 12.2, 12.0, 12.0  // 100 kPa
 };
 
-// TODO: Impliment AFR Table
+const uint16_t LTFTRPMAxis[LTFTRPM_BINS] = {375, 750, 1125, 1500, 1875, 2250, 2625, 3000,
+                                            3375, 3750, 4125, 4500, 4875, 5250, 5625, 6000};
+
+const uint16_t LTFTMAPAxis[LTFTMAP_BINS] = {8, 16, 24, 32, 40, 48, 56, 64,
+                                             72, 80, 88, 96, 104, 112, 120, 128};
+
+
+float LTFT[256] = {0};  // Initialize a 16x16 array for the long term fuel trims

@@ -18,6 +18,10 @@
 #define MAXSTFT 2000    // Maximum STFT correction
 #define MINSTFT -2000   // Minimum STFT correction
 
+#define LTFTSCALAR 0.1  // rate at which LTFT changes (%)
+#define STFTDEADBAND 3  // % in which LTFT does not change based on STFT
+
+
 const word16 DISPLACEMENT = 4;                            // Engine displacement in L
 const word16 DISPLACEMENT_PER_REV = DISPLACEMENT / 2;     // This will be pre-calculated and stored in ROM
 
@@ -141,9 +145,70 @@ void calculateSTFT(struct Engine *eng){
     } else if (eng->AFRIntigralAccumulator < MINSTFT){  // Check in MINSTFT is hit
         eng->AFRIntigralAccumulator = MINSTFT;
     }
-
-    eng->OXCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction
+    eng->OXCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction and scale back.
 } 
+
+int calculateLowerBinIdx(int value, const int axis[], int numBins){
+    int currentBinIdx = 0;
+    for(int i = 0; i < numBins; i++){
+        if (value < axis[i]){
+            currentBinIdx = i - 1;
+        }
+    }
+    return currentBinIdx;
+}
+
+void updateLTFT(struct Engine *eng){
+    // X is RPM Y is KPA
+    // X coordinate is the current RPM bin you are in same for Y but with Kpa
+    int engineRPM = eng->RPM;
+    int MAPKPA = eng->MAP / 100;
+
+    // Find upper and lower bins of RPM (X)
+    int lowerRPMBin = calculateLowerBinIdx(engineRPM, LTFTRPMAxis, LTFTRPM_BINS);   // Lower bin on X axis
+    int upperRPMBin = lowerRPMBin + 1;                                              // Upper bin on X axis
+
+    // Find upper and lower bins of MAP (Y)
+    int lowerMAPBin = calculateLowerBinIdx(MAPKPA, LTFTMAPAxis, LTFTMAP_BINS);      // Lower bin on Y axis
+    int upperMAPBin = lowerMAPBin + 1;                                              // Upper bin on Y axis
+
+    float RPMWeight = (engineRPM - LTFTRPMAxis[lowerRPMBin]) / LTFTRPMAxis[0];           // Calculate bin bias for RPM (X)
+    float MAPWeight = (MAPKPA - LTFTMAPAxis[lowerMAPBin]) / LTFTMAPAxis[0];              // Calculate bin bias for MAP (Y)
+
+    float topLeftShare = (1 - RPMWeight) * MAPWeight;                       // Calculate % shares for each cell
+    float topRightShare = RPMWeight * MAPWeight;
+    float bottomLeftShare = (1 - RPMWeight) * (1 - MAPWeight);
+    float bottomRightShare = RPMWeight * (1 - MAPWeight);
+
+    // Calculate cell indexes
+    int topLeftCell_idx = (lowerMAPBin * RPM_BINS) + lowerRPMBin;           // Index of top left cell
+    int topRightCell_idx = (lowerMAPBin * RPM_BINS) + upperRPMBin;          // Index of top right cell
+    int bottomLeftCell_idx = (upperMAPBin * RPM_BINS) + lowerRPMBin;        // Index of bottom left cell
+    int bottomRightCell_idx = (upperMAPBin * RPM_BINS) + upperMAPBin;       // Index of bottom right cell
+
+    float stepDirection = 0.0;
+
+    if (eng->OXCorrection > STFTDEADBAND){      // Check if we are in deadband
+        stepDirection = 1.0;                    // Adding fuel,  so step up LTFT
+
+    } else if (eng->OXCorrection < -STFTDEADBAND){
+        stepDirection = -1.0;                   // Removing fuel, lower LTFT
+    }
+
+    if (stepDirection != 0.0) {
+        LTFT[bottomLeftCell_idx]  += (stepDirection * LTFTSCALAR * bottomLeftShare);    // Adjust each cell according to its share
+        LTFT[bottomRightCell_idx] += (stepDirection * LTFTSCALAR * bottomRightShare);
+        LTFT[topLeftCell_idx]     += (stepDirection * LTFTSCALAR * topLeftShare);
+        LTFT[topRightCell_idx]    += (stepDirection * LTFTSCALAR * topRightShare);
+    }
+
+    eng->LTFTCorrection = (LTFT[bottomLeftCell_idx]  * bottomLeftShare)  +              // Interpolate the LTFT table to get fuel correction multiplier
+                          (LTFT[bottomRightCell_idx] * bottomRightShare) +
+                          (LTFT[topLeftCell_idx]     * topLeftShare)     +
+                          (LTFT[topRightCell_idx]    * topRightShare);
+
+}
+
 
 void initValues(struct Engine *eng, struct ECUSchedule *sched){
 
