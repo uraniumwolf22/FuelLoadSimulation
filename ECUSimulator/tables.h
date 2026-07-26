@@ -29,7 +29,7 @@ struct Engine {
     // Calculated values
     word16 fuelLoad;                // Current fuel load
     word16 VE;                      // Current volumetric efficiency
-    word16 OXCorrection;            // Fuel correction value based on POSTAFR and AFR delta
+    word16 STFTCorrection;            // Fuel correction value based on POSTAFR and AFR delta
     word16 LTFTCorrection;
     word16 REALAFR;                 // AFR detected by the oxygen sensor
     float AFR_TARGET;               // Current target AFR
@@ -90,8 +90,8 @@ const float afrTable[MAP_BINS * RPM_BINS] = {
     12.5, 12.5, 12.5, 12.5, 12.5, 12.5, 12.2, 12.2, 12.0, 12.0  // 100 kPa
 };
 
-const uint16_t LTFTRPMAxis[LTFTRPM_BINS] = {375, 750, 1125, 1500, 1875, 2250, 2625, 3000,
-                                            3375, 3750, 4125, 4500, 4875, 5250, 5625, 6000};
+const uint16_t LTFTRPMAxis[LTFTRPM_BINS] = {375, 750, 1125, 1500, 1875, 2250, 2625, 3000,    // 16 bins for LTFT RPM
+                                            3375, 3750, 4125, 4500, 4875, 5250, 5625, 6000}; // 16 bins for LTFT KPa
 
 const uint16_t LTFTMAPAxis[LTFTMAP_BINS] = {8, 16, 24, 32, 40, 48, 56, 64,
                                              72, 80, 88, 96, 104, 112, 120, 128};

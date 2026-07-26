@@ -126,8 +126,11 @@ word16 correctFuelLoad(struct Engine *eng){
     //TODO: You will need to condition the function to take the multiplier and convert it into actually how much the fuel load should change
     eng->fuelLoad = eng->fuelLoad * eng->toeEnrichmentMultiplier;
 
-    //TODO:  This should also be probably disabled under conditions like cold start and cranking
-    eng->fuelLoad = eng->fuelLoad * eng->OXCorrection;
+    //TODO:  
+    eng->fuelLoad = eng->fuelLoad * eng->STFTCorrection;    // Adjust for STFT
+
+    // LTFT probably should not update during cranking or cold start
+    eng->fuelLoad = eng->fuelLoad * eng->LTFTCorrection;    // Adjust for LTFT
 
 }
 
@@ -145,7 +148,7 @@ void calculateSTFT(struct Engine *eng){
     } else if (eng->AFRIntigralAccumulator < MINSTFT){  // Check in MINSTFT is hit
         eng->AFRIntigralAccumulator = MINSTFT;
     }
-    eng->OXCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction and scale back.
+    eng->STFTCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction and scale back.
 } 
 
 int calculateLowerBinIdx(int value, const int axis[], int numBins){
@@ -158,7 +161,7 @@ int calculateLowerBinIdx(int value, const int axis[], int numBins){
     return currentBinIdx;
 }
 
-void updateLTFT(struct Engine *eng){
+void calculateLTFT(struct Engine *eng){
     // X is RPM Y is KPA
     // X coordinate is the current RPM bin you are in same for Y but with Kpa
     int engineRPM = eng->RPM;
@@ -188,10 +191,10 @@ void updateLTFT(struct Engine *eng){
 
     float stepDirection = 0.0;
 
-    if (eng->OXCorrection > STFTDEADBAND){      // Check if we are in deadband
+    if (eng->STFTCorrection > STFTDEADBAND){      // Check if we are in deadband
         stepDirection = 1.0;                    // Adding fuel,  so step up LTFT
 
-    } else if (eng->OXCorrection < -STFTDEADBAND){
+    } else if (eng->STFTCorrection < -STFTDEADBAND){
         stepDirection = -1.0;                   // Removing fuel, lower LTFT
     }
 
@@ -245,6 +248,10 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
     calculateAFR(eng);                  // Calculate VE
 
     calculateFuelLoad(eng);             // Calculate the base fuel load
+
+    calculateSTFT(eng);
+
+    calculateLTFT(eng);
 
     correctFuelLoad(eng);               // Adjust fuel load for transient conditions
 }
