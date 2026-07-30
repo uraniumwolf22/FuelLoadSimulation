@@ -34,7 +34,7 @@ void calculateToeEnrichment(struct Engine *eng){
     int16_t deltaTPS = eng->TPS - eng->lastTPSValue;
 
     if(deltaTPS > TPSDeadband){
-        eng->toeEnrichmentMultiplier = eng->TPS * toeEnrichment;
+        eng->toeEnrichmentMultiplier = deltaTPS * toeEnrichment;
     }
 
     if (eng->toeEnrichmentMultiplier > 0){
@@ -110,7 +110,7 @@ void calculateFuelLoad(struct Engine *eng){         // Calculate engine theoreti
     eng->fuelLoad = (word16)fuelLoad;     // cast to int16 and return fuel load in grams per minute
 }
 
-word16 correctFuelLoad(struct Engine *eng){
+void correctFuelLoad(struct Engine *eng){
     if(eng->Coldstart == true && eng->COOLANT <= eng->coldCoolant){
         eng->fuelLoad = eng->fuelLoad * coldStartEnrichment;    //TODO: Convert this to adjusting Target AFR not actual fuel load
     } else {
