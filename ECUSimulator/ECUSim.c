@@ -247,7 +247,6 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
 
     if (sched->ECUStep % sched->TPSCheckInterval == 0){             // Calculate Toe in Enrichment on schedule
         calculateToeEnrichment(eng);
-
     }
 
     calculateVE(eng);                   // Update volumetric efficiency
@@ -297,7 +296,7 @@ int main(){
 
         *sharedData = engineInstance;               // Update shared data
 
-        sem_post(engineSem);        // Unlick SEM for pythons use
+        sem_post(engineSem);        // Unlock SEM for pythons use
     }
 
     // while(1){
