@@ -1,6 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include "tables.h"
+#include "semaphore.h"
 
 #define loopSize 100   // Define how many finite steps are available for one ECU loop
 
@@ -29,6 +34,7 @@ const word16 DISPLACEMENT_PER_REV = DISPLACEMENT / 2;     // This will be pre-ca
 word16 KtoFConversion(int F){           // This is used to convert F for the user to the internal representation in Kelvin.
     return ((F-32) * 5 / 9) + 273.15;
 }
+
 
 void calculateToeEnrichment(struct Engine *eng){
     int16_t deltaTPS = eng->TPS - eng->lastTPSValue;
@@ -151,7 +157,7 @@ void calculateSTFT(struct Engine *eng){
     eng->STFTCorrection = (P + eng->AFRIntigralAccumulator) / 100; // Set the oxygen correction and scale back.
 } 
 
-int calculateLowerBinIdx(int value, const int axis[], int numBins){
+int calculateLowerBinIdx(int value, const uint16_t axis[], int numBins){
     int currentBinIdx = 0;
     for(int i = 0; i < numBins; i++){
         if (value < axis[i]){
@@ -241,6 +247,7 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
 
     if (sched->ECUStep % sched->TPSCheckInterval == 0){             // Calculate Toe in Enrichment on schedule
         calculateToeEnrichment(eng);
+
     }
 
     calculateVE(eng);                   // Update volumetric efficiency
@@ -259,17 +266,44 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
 struct Engine engineInstance = {0};         // Instantiate instance of engine values
 struct ECUSchedule schedule;                // Instantiate the ECU Schedule
 
-struct Engine* get_engine_state() {     // To allow python to get the engine state
-    return &engineInstance;
-}
+const char *name = "/engineStateMemory";    // Define the location of the shared memory for engine struct
+const char *engineSemName = "/engineSemaphore"; // Define location for engine shared memory semaphore
+
+const int SIZE = sizeof(engineInstance);
 
 int main(){
 
-    initValues(&engineInstance, &schedule);
+    initValues(&engineInstance, &schedule);                                 // Initialize the ECU
 
-    while(1){
-        for(schedule.ECUStep = 0; schedule.ECUStep < schedule.ECULoopSize; schedule.ECUStep++){ // Iterate through the ECU loop
-            performStep(&engineInstance, &schedule);                                            // take a single step of the loop
-        }
+    sem_t *engineSem = sem_open(engineSemName, O_CREAT, 0666, 1);                    // Create the semaphore
+
+    if (engineSem == SEM_FAILED){
+        perror("failed to open semophore!!! Exiting");
+        return 1;
     }
+
+    int sharedEngineMem = shm_open(name, O_CREAT | O_RDWR, 0666);           // Create the shared memory
+    ftruncate(sharedEngineMem, SIZE);                                       // truncate engine memory size
+
+    void *ptr = mmap(0, SIZE, PROT_WRITE, MAP_SHARED, sharedEngineMem, 0);  // create a pointer to shared memory
+
+    struct Engine *sharedData = (struct Engine *)ptr;                       // define object pointer with type of engine struct and cast onto shared memory
+    *sharedData = engineInstance;                                           // update shared memory with real ECU instance
+    
+    while(1){
+        sem_wait(engineSem);        // Lock SEM for data update
+
+        performStep(&engineInstance, &schedule);    // Update ECU
+
+        *sharedData = engineInstance;               // Update shared data
+
+        sem_post(engineSem);        // Unlick SEM for pythons use
+    }
+
+    // while(1){
+    //     for(schedule.ECUStep = 0; schedule.ECUStep < schedule.ECULoopSize; schedule.ECUStep++){ // Iterate through the ECU loop
+    //         performStep(&engineInstance, &schedule);                                            // take a single step of the loop
+    //     }
+
+    //}
 }
