@@ -39,22 +39,22 @@ word16 KtoFConversion(int F){           // This is used to convert F for the use
 }
 
 
-void calculateToeEnrichment(struct Engine *eng){
-    int16_t deltaTPS = eng->TPS - eng->lastTPSValue;
+void calculateToeEnrichment(struct Engine *eng){                // Calculated the toe in enrichment based on the speed of the TPS sensor
+  int16_t deltaTPS = eng->TPS - eng->lastTPSValue;              // Calculate the delta of the TPS sensor over time
 
-    if(deltaTPS > TPSDeadband){
-        eng->toeEnrichmentMultiplier = deltaTPS * toeEnrichment;
-    }
+  if(deltaTPS > TPSDeadband){                                   // Make sure the delta is not outside of the deadband
+    eng->toeEnrichmentMultiplier = deltaTPS * toeEnrichment;
+  }
 
-    if (eng->toeEnrichmentMultiplier > 0){
-        eng->toeEnrichmentMultiplier = (eng->toeEnrichmentMultiplier * toeInEnrichmentDecay) / 100;
-    }
+  if (eng->toeEnrichmentMultiplier > 0){                        // Well obviously...
+    eng->toeEnrichmentMultiplier = (eng->toeEnrichmentMultiplier * toeInEnrichmentDecay) / 100;
+  }
 
-    if (eng->toeEnrichmentMultiplier < 2){
-        eng->toeEnrichmentMultiplier = 1;
-    }
+  if (eng->toeEnrichmentMultiplier < 2){
+    eng->toeEnrichmentMultiplier = 1;
+  }
 
-    eng->lastTPSValue = eng->TPS;
+  eng->lastTPSValue = eng->TPS;
 }
 
 void calculateAFR(struct Engine *eng){      // Fetches current AFR with lookup table
