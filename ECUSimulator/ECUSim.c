@@ -4,6 +4,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <errno.h>
+#include <signal.h>
+#include <string.h>
 #include "tables.h"
 #include "semaphore.h"
 
@@ -265,36 +268,104 @@ void performStep(struct Engine *eng, struct ECUSchedule *sched){
 struct Engine engineInstance = {0};         // Instantiate instance of engine values
 struct ECUSchedule schedule;                // Instantiate the ECU Schedule
 
-const char *name = "/engineStateMemory";    // Define the location of the shared memory for engine struct
-const char *engineSemName = "/engineSemaphore"; // Define location for engine shared memory semaphore
+const char *name = "engineStateMemory_local";    // Define the location of the shared memory for engine struct
+const char *engineSemName = "/engineSemaphore_local"; // Define location for engine shared memory semaphore
 
 const int SIZE = sizeof(engineInstance);
+static sem_t *engineSem = NULL;
+static int sharedEngineMem = -1;
+static void *mappedPtr = NULL;
+
+static void cleanup_ipc(void){
+    if (mappedPtr != NULL && mappedPtr != MAP_FAILED) {
+        munmap(mappedPtr, SIZE);
+        mappedPtr = NULL;
+    }
+
+    if (sharedEngineMem != -1) {
+        close(sharedEngineMem);
+        sharedEngineMem = -1;
+    }
+
+    if (engineSem != NULL) {
+        sem_close(engineSem);
+        engineSem = NULL;
+    }
+
+    sem_unlink(engineSemName);
+    shm_unlink(name);
+}
+
+static void handle_signal(int signalNumber){
+    (void)signalNumber;
+    cleanup_ipc();
+    _exit(0);
+}
 
 int main(){
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
+    atexit(cleanup_ipc);
 
     initValues(&engineInstance, &schedule);                                 // Initialize the ECU
 
-    sem_t *engineSem = sem_open(engineSemName, O_CREAT, 0666, 1);                    // Create the semaphore
+    sem_unlink(engineSemName);
+    shm_unlink(name);
+
+    engineSem = sem_open(engineSemName, O_CREAT, 0666, 1);                    // Create the semaphore
 
     if (engineSem == SEM_FAILED){
         perror("failed to open semophore!!! Exiting");
         return 1;
     }
 
-    int sharedEngineMem = shm_open(name, O_CREAT | O_RDWR, 0666);           // Create the shared memory
-    ftruncate(sharedEngineMem, SIZE);                                       // truncate engine memory size
+    sharedEngineMem = shm_open(name, O_CREAT | O_RDWR, 0666);           // Create the shared memory
+    if (sharedEngineMem == -1){
+        perror("failed to open shared memory!!! Exiting");
+        sem_close(engineSem);
+        engineSem = NULL;
+        sem_unlink(engineSemName);
+        return 1;
+    }
 
-    void *ptr = mmap(0, SIZE, PROT_WRITE, MAP_SHARED, sharedEngineMem, 0);  // create a pointer to shared memory
+    if (ftruncate(sharedEngineMem, SIZE) == -1){
+        perror("failed to resize shared memory!!! Exiting");
+        close(sharedEngineMem);
+        sharedEngineMem = -1;
+        sem_close(engineSem);
+        engineSem = NULL;
+        sem_unlink(engineSemName);
+        shm_unlink(name);
+        return 1;
+    }
 
-    struct Engine *sharedData = (struct Engine *)ptr;                       // define object pointer with type of engine struct and cast onto shared memory
+    mappedPtr = mmap(0, SIZE, PROT_WRITE, MAP_SHARED, sharedEngineMem, 0);  // create a pointer to shared memory
+    if (mappedPtr == MAP_FAILED){
+        perror("failed to map shared memory!!! Exiting");
+        close(sharedEngineMem);
+        sharedEngineMem = -1;
+        sem_close(engineSem);
+        engineSem = NULL;
+        sem_unlink(engineSemName);
+        shm_unlink(name);
+        return 1;
+    }
+
+    struct Engine *sharedData = (struct Engine *)mappedPtr;                       // define object pointer with type of engine struct and cast onto shared memory
     *sharedData = engineInstance;                                           // update shared memory with real ECU instance
     
     while(1){
         sem_wait(engineSem);        // Lock SEM for data update
 
-        performStep(&engineInstance, &schedule);    // Update ECU
+        engineInstance = *sharedData;              // Pull latest shared state back into local ECU copy
+        performStep(&engineInstance, &schedule);   // Update ECU
 
-        *sharedData = engineInstance;               // Update shared data
+        *sharedData = engineInstance;              // Update shared data
 
         sem_post(engineSem);        // Unlock SEM for pythons use
     }

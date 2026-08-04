@@ -1,13 +1,27 @@
 # This Python file uses the following encoding: utf-8
+import gc
 import sys
 import ctypes
 import subprocess
 import time
-import posix_ipc
+from pathlib import Path
 from multiprocessing import shared_memory
+
+import posix_ipc
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ui_form import Ui_ECUGUI
+
+SIMULATOR_DIR = Path(__file__).resolve().parent.parent
+ECU_EMULATOR_PATH = SIMULATOR_DIR / "ECU"
+
+sem = None
+enginedata = None
+engineStatus = None
+ECUPROC = None
+
+SEM_NAME = "/engineSemaphore_local"
+MEMORY_NAME = "engineStateMemory_local"
 
 # Define the engine struct modeled after tables.h
 class Engine(ctypes.Structure):
@@ -46,38 +60,110 @@ class Engine(ctypes.Structure):
     ]
 
 
-class ECUGUI(QWidget):
-    def __init__(self, parent=None):
+class ECUGUI(QWidget):                  # ECU Widget
+    def __init__(self, parent=None):    # Init the UI
         super().__init__(parent)
         self.ui = Ui_ECUGUI()
         self.ui.setupUi(self)
 
-        self.ui.coolantSlider.valueChanged.connect(self.updateCoolantTemp)
+        self.ui.coolantSlider.valueChanged.connect(self.updateCoolantTemp)  # Connect coolant slider to update function on value change
 
 
-    def updateCoolantTemp(self):
-        current_value = self.ui.coolantSlider.value()
-        sem.acquire()
-        engineStatus.COOLANT = current_value
-        sem.release()
+    def updateCoolantTemp(self):                        # Send the new coolant temp to the ECU
+        current_value = self.ui.coolantSlider.value()   # Fetch current slider value
+        if sem is None or engineStatus is None:         # Return if engineStatus or semaphore is broken
+            return
 
-        print(f"Engine Coolant is at {engineStatus.COOLANT}")
+        sem.acquire()                                   # Get SEM Lock
+        engineStatus.COOLANT = current_value            # Set shared memory to new value
+        sem.release()                                   # Release SEM lock
+
+        print(f"Engine Coolant is at {engineStatus.COOLANT}")   
+
+
+def launch_ecu():                                                                   # Launch the ECU Process
+    if not ECU_EMULATOR_PATH.exists():                                              # Check if ECU executable exists
+        raise FileNotFoundError(f"ECU executable not found... {ECU_EMULATOR_PATH}") # 
+
+    return subprocess.Popen([str(ECU_EMULATOR_PATH)], cwd=str(SIMULATOR_DIR))
+
+
+def wait_for_shared_resources(timeout=5.0):         # Function that waits for resources to initialize
+    deadline = time.monotonic() + timeout           # Define timeout delta
+    last_error = None
+
+    while time.monotonic() < deadline:
+        try:
+            sem_obj = posix_ipc.Semaphore(SEM_NAME)                                     # Establish SEM connection
+            shared_mem = shared_memory.SharedMemory(name=MEMORY_NAME, create=False)     # Establish shared memory
+            return sem_obj, shared_mem
+        
+        except (FileNotFoundError, posix_ipc.ExistentialError, OSError) as exc:
+            last_error = exc
+            time.sleep(0.1)
+
+    raise RuntimeError(f"Too much time passed.  broke bc: {last_error}") from last_error
+
+
+def release_shared_resources():             # Break shared memory and semaphore
+    global sem, enginedata, engineStatus
+
+    if engineStatus is not None:            # Remove internal engine status structure
+        engineStatus = None
+
+    if enginedata is not None:
+        try:
+            enginedata.close()              # Close shared memory
+        except Exception:
+            pass
+        enginedata = None
+
+    if sem is not None:                     # Close semaphore
+        try:
+            sem.close()
+        except Exception:
+            pass
+        sem = None
+
+    try:
+        posix_ipc.Semaphore(SEM_NAME).unlink()
+    except Exception:
+        pass
+
+    try:
+        shared_memory.SharedMemory(name=MEMORY_NAME, create=False).unlink()
+    except Exception:
+        pass
+
+    gc.collect()    # idk maybe this will help not break shi
 
 
 if __name__ == "__main__":
-    ECUPROC = subprocess.Popen(".././ECU")             # Define the process to open (ECU Simulator)
-    time.sleep(0.1)                                 # Delay for process to init
+    try:
+        ECUPROC = launch_ecu()      # Lauch the ECU instance
 
-    sem = posix_ipc.Semaphore("/engineSemaphore")   # define semophore.  Created by ECUSimulator
-    enginedata = shared_memory.SharedMemory(name="engineStateMemory", create=False) # Define shared memory object
+        sem, enginedata = wait_for_shared_resources()       # Open the shared resources
 
-    engineStatus = Engine.from_buffer(enginedata.buf)                               # Update engine status struct
+        engineStatus = Engine.from_buffer(enginedata.buf)   # Point internal struct to shared memory
 
-    app = QApplication(sys.argv)
-    widget = ECUGUI()
-    widget.show()
-    sys.exit(app.exec())
+        app = QApplication(sys.argv)                        # IDK what these do they came with QT.  should figure that out.
+        widget = ECUGUI()
+        widget.show()               # as its name implies probably
 
-    ECUPROC.terminate()
-    enginedata.close()
-    sem.close()
+        try:
+            sys.exit(app.exec())   # close QT application
+
+        finally:
+            if ECUPROC is not None and ECUPROC.poll() is None:
+                ECUPROC.terminate() # Force ECU to terminate
+                try:
+                    ECUPROC.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    ECUPROC.kill()  # If ECU proc does not play nice,  kill.
+                    ECUPROC.wait(timeout=2)
+
+            release_shared_resources()  # Release the shared resources
+
+    except Exception as exc:
+        print(f"ECU GUI Failed: {exc}") # General error.
+        sys.exit(1)

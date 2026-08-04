@@ -2,7 +2,13 @@ import ctypes
 from multiprocessing import shared_memory
 import subprocess
 import time
+from pathlib import Path
 import posix_ipc
+
+SIMULATOR_DIR = Path(__file__).resolve().parent
+ECU_EMULATOR_PATH = SIMULATOR_DIR / "ECU"
+SEM_NAME = "/engineSemaphore_local"
+MEMORY_NAME = "engineStateMemory_local"
 
 # Define C types
 
@@ -45,11 +51,11 @@ class Engine(ctypes.Structure):
 
 def main():
 
-    ECUPROC = subprocess.Popen("./ECU")             # Define the process to open (ECU Simulator)
+    ECUPROC = subprocess.Popen([str(ECU_EMULATOR_PATH)], cwd=str(SIMULATOR_DIR))  # Define the process to open (ECU Simulator)
     time.sleep(0.1)                                 # Delay for process to init
 
-    sem = posix_ipc.Semaphore("/engineSemaphore")   # define semophore.  Created by ECUSimulator
-    enginedata = shared_memory.SharedMemory(name="engineStateMemory", create=False) # Define shared memory object
+    sem = posix_ipc.Semaphore(SEM_NAME)   # define semophore.  Created by ECUSimulator
+    enginedata = shared_memory.SharedMemory(name=MEMORY_NAME, create=False) # Define shared memory object
 
     engineStatus = Engine.from_buffer(enginedata.buf)                               # Update engine status struct
 
