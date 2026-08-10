@@ -1,3 +1,8 @@
+/*
+This is the C based fuel-only ECU developed by Logan Ross <3
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
