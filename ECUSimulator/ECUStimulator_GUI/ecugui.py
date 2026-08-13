@@ -64,7 +64,8 @@ class ECUGUI(QWidget):                  # ECU Widget
     def __init__(self, parent=None):    # Init the UI
         super().__init__(parent)
         self.ui = Ui_ECUGUI()
-        self.ui.setupUi(self)        self.ui.coolantSlider.valueChanged.connect(self.updateCoolantTemp)  # Connect coolant slider to update function on value change
+        self.ui.setupUi(self)
+        self.ui.coolantSlider.valueChanged.connect(self.updateCoolantTemp)  # Connect coolant slider to update function on value change
 
 
     def updateCoolantTemp(self):                        # Send the new coolant temp to the ECU

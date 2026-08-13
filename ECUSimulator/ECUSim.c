@@ -317,7 +317,7 @@ int main(){
     sigaction(SIGQUIT, &sa, NULL);
     atexit(cleanup_ipc);
 
-    initValues(&engineInstance, &schedule);                                 // Initialize the ECU
+    initValues(&engineInstance, &schedule);                                 // Initialize the ECU Values
 
     sem_unlink(engineSemName);
     shm_unlink(name);
@@ -372,7 +372,7 @@ int main(){
 
         *sharedData = engineInstance;              // Update shared data
 
-        sem_post(engineSem);        // Unlock SEM for pythons use
+        sem_post(engineSem);        // Unlock SEM for other programs
     }
 
     // while(1){
