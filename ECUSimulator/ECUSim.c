@@ -376,7 +376,7 @@ int main(){
         *sharedData = engineInstance;              // Update shared data
 
         sem_post(engineSem);        // Unlock SEM for other programs
-          printf("%d", engineInstance.TPS);
+	debug(&engineInstance);
     }
 
     // while(1){
