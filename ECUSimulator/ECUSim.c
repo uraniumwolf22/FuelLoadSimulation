@@ -376,7 +376,7 @@ int main(){
         *sharedData = engineInstance;              // Update shared data
 
         sem_post(engineSem);        // Unlock SEM for other programs
-	debug(&engineInstance);
+	//debug(&engineInstance);
     }
 
     // while(1){

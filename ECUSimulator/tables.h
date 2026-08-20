@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef uint16_t word16;
 typedef uint32_t word32;
@@ -98,3 +99,10 @@ const uint16_t LTFTMAPAxis[LTFTMAP_BINS] = {8, 16, 24, 32, 40, 48, 56, 64,
 
 
 float LTFT[256] = {0};  // Initialize a 16x16 array for the long term fuel trims
+
+void debug(struct Engine *engine) {
+  printf("\e[H\nTPS: %d\nRPM: %d\nMAP: %d\nAAP: %d\nIAT: %d\nOXVoltage: "
+         "%d\nCOOLANT:%d\nfuelTrim: %d\n",
+         engine->TPS, engine->RPM, engine->MAP, engine->AAP, engine->IAT,
+         engine->OXVoltage, engine->COOLANT, engine->fuelTrim);
+}
